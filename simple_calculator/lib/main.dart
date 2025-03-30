@@ -118,7 +118,12 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
     '1', '2', '3', '-',
     'C', '0', '.', '+',
     '⌫', '(', ')', '=',
+    '+/-', '', '', '',
   ];
+
+  String _cleanDisplay(String expr) {
+    return expr.replaceAll('--', '+').replaceAll('-(-', '+(');
+  }
 
   void _buttonPressed(String value) {
     setState(() {
@@ -154,6 +159,24 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
             _expression += value;
           }
         }
+      } else if (value == '+/-') {
+        // Find last number and togge its sign.
+        final match = RegExp(r'(\(?-?\d*\.?\d+\)?)$').firstMatch(_expression);
+        if (match != null) {
+          final lastNumber = match.group(0)!;
+          final start = match.start;
+          final end = match.end;
+
+          // Don't allow toggling zero
+          if (lastNumber.replaceAll(RegExp(r'[().]'), '') == '0') return;
+
+          // Toggle: -(x) → x, x → -(x)
+          final toggled = lastNumber.startsWith('-(') && lastNumber.endsWith(')')
+              ? lastNumber.substring(2, lastNumber.length - 1)  // Remove wrapping
+              : '-(${lastNumber.replaceAll('(', '').replaceAll(')', '')})'; // Clean wrap
+
+          _expression = _expression.replaceRange(start, end, toggled);
+        }
       } else {
         if (_justEvaluated) {
           if (RegExp(r'^\d$').hasMatch(value) || value == '.') {
@@ -165,7 +188,20 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           }
           _justEvaluated = false;
         } else {
-          _expression += value;
+          final parts = _expression.split(RegExp(r'[+\-×÷()]'));
+          final last = parts.isNotEmpty ? parts.last : '';
+
+          // Handle 0 separately.
+          if (value == '0') {
+            if (last == '0') return; // Prevent double 0.
+          }
+
+          // Handle invalid leading 0s like 03.
+          if (last.startsWith('0') && !last.contains('.') && last.length == 1 && RegExp(r'^[1-9]$').hasMatch(value)) {
+            _expression = _expression.substring(0, _expression.length - 1) + value;
+          } else {
+            _expression += value;
+          }
         }
       }
     });
@@ -173,7 +209,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
 
   String _evaluate(String expr) {
     try {
-      String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/');
+      String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/').replaceAll('--', '+').replaceAll('-(-', '+(');
       ShuntingYardParser parser = ShuntingYardParser();
       Expression parsedExpression = parser.parse(finalExpr);
       ContextModel context = ContextModel();
@@ -216,7 +252,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 alignment: Alignment.center,
                 child: Text(
-                  _expression,
+                  _cleanDisplay(_expression),
                   style: TextStyle(fontSize: 60, color: Theme.of(context).textTheme.bodyLarge!.color),
                 ),
               ),
@@ -234,8 +270,8 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                width: 640,
-                height: 800,
+                width: 600,
+                height: 960,
                 child: GridView.count(
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisCount: 4,
