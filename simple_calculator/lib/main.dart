@@ -9,8 +9,8 @@
  * 
  * @packages
  *    flutter
- *    cupertino_icons
  *    audioplayer
+ *    math_expressions
  */
 
 import 'package:flutter/material.dart';
