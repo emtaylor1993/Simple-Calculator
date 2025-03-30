@@ -11,61 +11,115 @@
  *    flutter
  *    audioplayer
  *    math_expressions
+ *    shared_preferences
  */
 
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:math_expressions/math_expressions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() => runApp(CalculatorApp());
+void main() => runApp(const CalculatorApp());
 
-// This class represents the root widget for the entire app.
-class CalculatorApp extends StatelessWidget {
+class CalculatorApp extends StatefulWidget {
   const CalculatorApp({super.key});
+
+  @override
+  State<CalculatorApp> createState() => _CalculatorAppState();
+}
+
+class _CalculatorAppState extends State<CalculatorApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTheme();
+  }
+
+  Future<void> _loadTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final themeString = prefs.getString('theme_mode') ?? 'system';
+    setState(() {
+      _themeMode = {
+        'light': ThemeMode.light,
+        'dark': ThemeMode.dark,
+        'system': ThemeMode.system,
+      }[themeString]!;
+    });
+  }
+
+  Future<void> _toggleTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      if (_themeMode == ThemeMode.light) {
+        _themeMode = ThemeMode.dark;
+        prefs.setString('theme_mode', 'dark');
+      } else {
+        _themeMode = ThemeMode.light;
+        prefs.setString('theme_mode', 'light');
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Calculator',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Colors.black,
+      themeMode: _themeMode,
+      theme: ThemeData.light().copyWith(
+        scaffoldBackgroundColor: Colors.white,
+        textTheme: const TextTheme(bodyLarge: TextStyle(color: Colors.black)),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
-      home: CalculatorHomePage(),
+      darkTheme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      home: CalculatorHomePage(
+        onToggleTheme: _toggleTheme,
+        isDarkMode: _themeMode == ThemeMode.dark,
+      ),
     );
   }
 }
 
-// Main stateful widget that holds the calculator logic and UI.
 class CalculatorHomePage extends StatefulWidget {
-  const CalculatorHomePage({super.key});
+  final VoidCallback onToggleTheme;
+  final bool isDarkMode;
+
+  const CalculatorHomePage({
+    super.key,
+    required this.onToggleTheme,
+    required this.isDarkMode,
+  });
 
   @override
   CalculatorHomePageState createState() => CalculatorHomePageState();
 }
 
 class CalculatorHomePageState extends State<CalculatorHomePage> {
-  String _expression = '';  // User input.
-  String _result = '';      // Result after pressing "=".
+  String _expression = '';
+  String _result = '';
   bool _justEvaluated = false;
 
-  // Button labels in order. Used to build button grid.
   final List<String> buttons = [
     '7', '8', '9', '÷',
     '4', '5', '6', '×',
     '1', '2', '3', '-',
     'C', '0', '.', '+',
-    '⌫', '', '', '=',
+    '⌫', '(', ')', '=',
   ];
 
-  // Called when any button is tapped/pressed.
   void _buttonPressed(String value) {
     setState(() {
       if (value == 'C') {
@@ -81,7 +135,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           } else {
             _result = 'Invalid';
           }
-        } catch (e) {
+        } catch (_) {
           _result = 'Error';
         }
       } else if (value == '⌫') {
@@ -93,7 +147,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
         final lastPart = parts.isNotEmpty ? parts.last : '';
         if (!lastPart.contains('.')) {
           if (_justEvaluated) {
-            _expression = '0.'; // Start new decimal.
+            _expression = '0.';
             _result = '';
             _justEvaluated = false;
           } else {
@@ -101,12 +155,11 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           }
         }
       } else {
-        // If we just pressed = and now press a number, start fresh.
         if (_justEvaluated) {
-          if (RegExp(r'^\d$').hasMatch(value)) {
-            _expression = value; // New expression starts here.
+          if (RegExp(r'^\d$').hasMatch(value) || value == '.') {
+            _expression = value;
             _result = '';
-          } else if (['+', '-', '×', '÷'].contains(value)) {
+          } else if (['+', '-', '×', '÷', '(', ')'].contains(value)) {
             _expression = _result + value;
             _result = '';
           }
@@ -117,26 +170,20 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
       }
     });
   }
-  
-  // Expression evaluator.
+
   String _evaluate(String expr) {
     try {
-      // Replace all UI-friendly math symbols with true math symbols.
       String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/');
-
-      // Use math_expressions package to parse and evaluate.
       ShuntingYardParser parser = ShuntingYardParser();
       Expression parsedExpression = parser.parse(finalExpr);
       ContextModel context = ContextModel();
-
       double eval = parsedExpression.evaluate(EvaluationType.REAL, context);
       return eval.toStringAsFixed(6).replaceFirst(RegExp(r'\.?0+$'), '');
-    } catch (e) {
+    } catch (_) {
       return 'Invalid';
     }
   }
 
-  // Constructs a single calculator button with animation and sound.
   Widget _buildButton(String text, {Color? color}) {
     return _AnimatedCalculatorButton(
       label: text,
@@ -148,46 +195,59 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Calculator'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            onPressed: widget.onToggleTheme,
+            icon: Icon(widget.isDarkMode ? Icons.wb_sunny : Icons.dark_mode),
+            tooltip: 'Toggle Theme',
+          )
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Display expression.
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 alignment: Alignment.center,
                 child: Text(
                   _expression,
-                  style: TextStyle(fontSize: 94, color: Colors.grey[400]),
+                  style: TextStyle(fontSize: 60, color: Theme.of(context).textTheme.bodyLarge!.color),
                 ),
               ),
-
-              // Display result.
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 alignment: Alignment.center,
                 child: Text(
                   _result,
-                  style: TextStyle(fontSize: 94, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(
+                    fontSize: 60,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.bodyLarge!.color,
+                  ),
                 ),
               ),
-
-              SizedBox(height: 20),
-
-              // Grid of buttons.
+              const SizedBox(height: 20),
               SizedBox(
                 width: 640,
                 height: 800,
                 child: GridView.count(
-                  physics: NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(),
                   crossAxisCount: 4,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                   children: buttons.map((button) {
                     final isOperator = ['÷', '×', '-', '+', '='].contains(button);
-                    final color = button == 'C' ? Colors.red : isOperator ? Colors.orange : null;
+                    final color = button == 'C'
+                        ? Colors.red
+                        : isOperator
+                            ? Colors.orange
+                            : null;
                     return _buildButton(button, color: color);
                   }).toList(),
                 ),
@@ -200,7 +260,6 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   }
 }
 
-// Custom widget for animated, tappable calculator buttons.
 class _AnimatedCalculatorButton extends StatefulWidget {
   final String label;
   final Color color;
@@ -217,31 +276,28 @@ class _AnimatedCalculatorButton extends StatefulWidget {
 }
 
 class _AnimatedCalculatorButtonState extends State<_AnimatedCalculatorButton> with TickerProviderStateMixin {
-  late AnimationController _scaleController;      // For scale-in animation.
-  late AnimationController _flashController;      // For color flash.
-  late Animation<Color?> _flashAnimation;         // Animates the button color.
-  final AudioPlayer _audioPlayer = AudioPlayer(); // For tap sound.
+  late AnimationController _scaleController;
+  late AnimationController _flashController;
+  late Animation<Color?> _flashAnimation;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
 
-    // Button press scale-in animation for a slight shrink.
     _scaleController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 100),
+      duration: const Duration(milliseconds: 100),
       lowerBound: 0.95,
       upperBound: 1.0,
       value: 1.0,
     );
 
-    // Flash-to-white animation controller.
     _flashController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 200),
     );
 
-    // Animate button color between original and a light gray.
     _flashAnimation = ColorTween(
       begin: widget.color,
       end: const Color.fromARGB(255, 184, 183, 183),
@@ -250,7 +306,6 @@ class _AnimatedCalculatorButtonState extends State<_AnimatedCalculatorButton> wi
       curve: Curves.easeOut,
     ));
 
-    // Automatically reverse the flash after it's done.
     _flashController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         _flashController.reverse();
@@ -265,18 +320,15 @@ class _AnimatedCalculatorButtonState extends State<_AnimatedCalculatorButton> wi
     super.dispose();
   }
 
-  // When button is pressed.
   void _onTapDown(TapDownDetails details) {
     _scaleController.reverse();
     _flashController.forward(from: 0.0);
   }
 
-  // When button is released.
   void _onTapUp(TapUpDetails details) {
     _scaleController.forward();
   }
 
-  // Cancel animation if tap is cancelled.
   void _onTapCancel() {
     _scaleController.forward();
   }
@@ -300,7 +352,7 @@ class _AnimatedCalculatorButtonState extends State<_AnimatedCalculatorButton> wi
               decoration: BoxDecoration(
                 color: _flashAnimation.value,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
                     color: Colors.black54,
                     blurRadius: 4,
@@ -311,10 +363,10 @@ class _AnimatedCalculatorButtonState extends State<_AnimatedCalculatorButton> wi
               child: Center(
                 child: Text(
                   widget.label,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 60,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white, // Change to black for contrast on white flash
+                    color: Colors.white,
                   ),
                 ),
               ),
