@@ -14,6 +14,16 @@
  *    shared_preferences
  */
 
+/*
+ * MAIN CALCULATOR CLASS
+ * 
+ * @author Emmanuel Taylor
+ * 
+ * @description
+ *    A simple calculator app with light/dark themes, sound, animations,
+ *    history tracking, and persistent storage.
+ */
+
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:math_expressions/math_expressions.dart';
@@ -112,6 +122,8 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   String _result = '';
   bool _justEvaluated = false;
 
+  List<Map<String, String>> _history = [];
+
   final List<String> buttons = [
     '7', '8', '9', '÷',
     '4', '5', '6', '×',
@@ -121,8 +133,10 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
     '+/-', '', '', '',
   ];
 
-  String _cleanDisplay(String expr) {
-    return expr.replaceAll('--', '+').replaceAll('-(-', '+(');
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
   }
 
   void _buttonPressed(String value) {
@@ -137,6 +151,12 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           if (evaluated != 'Invalid') {
             _result = evaluated;
             _justEvaluated = true;
+
+            _history.insert(0, {
+              'expression': _expression,
+              'result': evaluated,
+            });
+            _saveHistory();
           } else {
             _result = 'Invalid';
           }
@@ -160,21 +180,17 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           }
         }
       } else if (value == '+/-') {
-        // Find last number and togge its sign.
-        final match = RegExp(r'(\(?-?\d*\.?\d+\)?)$').firstMatch(_expression);
+        final match = RegExp(r'(-?\d*\.?\d+)$').firstMatch(_expression);
         if (match != null) {
           final lastNumber = match.group(0)!;
           final start = match.start;
           final end = match.end;
-
-          // Don't allow toggling zero
           if (lastNumber.replaceAll(RegExp(r'[().]'), '') == '0') return;
-
-          // Toggle: -(x) → x, x → -(x)
-          final toggled = lastNumber.startsWith('-(') && lastNumber.endsWith(')')
-              ? lastNumber.substring(2, lastNumber.length - 1)  // Remove wrapping
-              : '-(${lastNumber.replaceAll('(', '').replaceAll(')', '')})'; // Clean wrap
-
+          final toggled = lastNumber.contains('-(')
+              ? lastNumber.replaceFirst('-(', '').replaceFirst(')', '')
+              : lastNumber.startsWith('-')
+                  ? lastNumber.replaceFirst('-', '')
+                  : '-($lastNumber)';
           _expression = _expression.replaceRange(start, end, toggled);
         }
       } else {
@@ -188,20 +204,18 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           }
           _justEvaluated = false;
         } else {
-          final parts = _expression.split(RegExp(r'[+\-×÷()]'));
-          final last = parts.isNotEmpty ? parts.last : '';
-
-          // Handle 0 separately.
           if (value == '0') {
-            if (last == '0') return; // Prevent double 0.
+            final parts = _expression.split(RegExp(r'[+\-×÷()]'));
+            final last = parts.isNotEmpty ? parts.last : '';
+            if (last == '0') return;
+          } else if (RegExp(r'^[1-9]$').hasMatch(value)) {
+            final parts = _expression.split(RegExp(r'[+\-×÷()]'));
+            final last = parts.isNotEmpty ? parts.last : '';
+            if (last == '0') {
+              _expression = _expression.substring(0, _expression.length - 1);
+            }
           }
-
-          // Handle invalid leading 0s like 03.
-          if (last.startsWith('0') && !last.contains('.') && last.length == 1 && RegExp(r'^[1-9]$').hasMatch(value)) {
-            _expression = _expression.substring(0, _expression.length - 1) + value;
-          } else {
-            _expression += value;
-          }
+          _expression += value;
         }
       }
     });
@@ -209,7 +223,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
 
   String _evaluate(String expr) {
     try {
-      String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/').replaceAll('--', '+').replaceAll('-(-', '+(');
+      String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/');
       ShuntingYardParser parser = ShuntingYardParser();
       Expression parsedExpression = parser.parse(finalExpr);
       ContextModel context = ContextModel();
@@ -218,6 +232,92 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
     } catch (_) {
       return 'Invalid';
     }
+  }
+
+  Future<void> _saveHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = _history.map((e) => '${e['expression']}|${e['result']}').toList();
+    await prefs.setStringList('calc_history', encoded);
+  }
+
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final loaded = prefs.getStringList('calc_history') ?? [];
+
+    setState(() {
+      _history = loaded.map((item) {
+        final parts = item.split('|');
+        return {
+          'expression': parts[0],
+          'result': parts.length > 1 ? parts[1] : '',
+        };
+      }).toList();
+    });
+  }
+
+  void _showHistoryPanel() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('History', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _history.clear();
+                        });
+                        _saveHistory();
+                        Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.delete_outline, size: 35),
+                      label: const Text('Clear', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: _history.isEmpty
+                    ? const Center(child: Text('No history yet.', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)))
+                    : ListView.builder(
+                        itemCount: _history.length,
+                        itemBuilder: (context, index) {
+                          final entry = _history[index];
+                          return ListTile(
+                            title: Text(entry['expression'] ?? '',
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge!.color)),
+                            trailing: Text('= ${entry['result']}',
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge!.color)),
+                            onTap: () {
+                              Navigator.pop(context);
+                              setState(() {
+                                _expression = entry['result'] ?? '';
+                                _result = '';
+                                _justEvaluated = false;
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildButton(String text, {Color? color}) {
@@ -237,10 +337,15 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
         backgroundColor: Colors.transparent,
         actions: [
           IconButton(
+            onPressed: _showHistoryPanel,
+            icon: const Icon(Icons.history),
+            tooltip: 'View History',
+          ),
+          IconButton(
             onPressed: widget.onToggleTheme,
             icon: Icon(widget.isDarkMode ? Icons.wb_sunny : Icons.dark_mode),
             tooltip: 'Toggle Theme',
-          )
+          ),
         ],
       ),
       body: SafeArea(
@@ -252,7 +357,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 alignment: Alignment.center,
                 child: Text(
-                  _cleanDisplay(_expression),
+                  _expression,
                   style: TextStyle(fontSize: 60, color: Theme.of(context).textTheme.bodyLarge!.color),
                 ),
               ),
