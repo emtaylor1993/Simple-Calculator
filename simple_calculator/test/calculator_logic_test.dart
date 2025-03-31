@@ -13,7 +13,7 @@
  */
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:simple_calculator/calculator_logic.dart'; // adjust based on your actual app name
+import 'package:simple_calculator/calculator_logic.dart';
 
 void main() {
   group('CalculatorLogic.evaluate', () {

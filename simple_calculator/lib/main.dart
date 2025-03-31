@@ -14,16 +14,6 @@
  *    shared_preferences
  */
 
-/*
- * MAIN CALCULATOR CLASS
- * 
- * @author Emmanuel Taylor
- * 
- * @description
- *    A simple calculator app with light/dark themes, sound, animations,
- *    history tracking, and persistent storage.
- */
-
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:math_expressions/math_expressions.dart';
@@ -39,14 +29,18 @@ class CalculatorApp extends StatefulWidget {
 }
 
 class _CalculatorAppState extends State<CalculatorApp> {
+  // Tracks the current theme mode from the system.
   ThemeMode _themeMode = ThemeMode.system;
 
   @override
   void initState() {
     super.initState();
+
+    // Loads the saved theme on startup.
     _loadTheme();
   }
 
+  /// Loads the theme preference from shared preferences.
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     final themeString = prefs.getString('theme_mode') ?? 'system';
@@ -59,6 +53,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
     });
   }
 
+  /// Toggles between light/dark mode and saves it.
   Future<void> _toggleTheme() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -104,6 +99,7 @@ class _CalculatorAppState extends State<CalculatorApp> {
 }
 
 class CalculatorHomePage extends StatefulWidget {
+  // Triggered when toggling the theme.
   final VoidCallback onToggleTheme;
   final bool isDarkMode;
 
@@ -118,57 +114,217 @@ class CalculatorHomePage extends StatefulWidget {
 }
 
 class CalculatorHomePageState extends State<CalculatorHomePage> {
-  String _expression = '';
-  String _result = '';
-  bool _justEvaluated = false;
+  @override
+  void initState() {
+    super.initState();
 
-  List<Map<String, String>> _history = [];
+    // Load stored calculation history on app startup.
+    _loadHistory();
 
+    // Load stored memory value on app startup.
+    _loadMemory();
+  }
+
+  String _expression = '';      // Current user expression input.
+  String _result = '';          // Result after pressing '='.
+  bool _justEvaluated = false;  // Prevents appending after evaluation.
+  List<String> _history = [];   // Stores recent calculations.
+  double? _memory = 0.0;         // Stores values in memory for M+, M-, MR, MC.
+  DateTime? _lastSnackBarTime;
+  
+  final Duration _cooldownDuration = const Duration(milliseconds: 2000);
   final List<String> buttons = [
+    'MC', 'MR', 'M+', 'M-',
     '7', '8', '9', '÷',
     '4', '5', '6', '×',
     '1', '2', '3', '-',
     'C', '0', '.', '+',
     '⌫', '(', ')', '=',
-    '+/-', '', '', '',
+    '+/-', '^', '%', '√',
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadHistory();
+  /// Load saved history from shared preferences.
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _history = prefs.getStringList('calc_history') ?? [];
+    });
   }
 
+  /// Save a new expression and result to history.
+  Future<void> _saveToHistory(String expression, String result) async {
+    final prefs = await SharedPreferences.getInstance();
+    final entry = '$expression = $result';
+    setState(() {
+      _history.insert(0, entry);
+      if (_history.length > 20) {
+        _history = _history.sublist(0, 20);
+      }
+    });
+    await prefs.setStringList('calc_history', _history);
+  }
+
+  /// Clear all stored history.
+  Future<void> _clearHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('calc_history');
+    setState(() {
+      _history.clear();
+    });
+  }
+
+  Future<void> _loadMemory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedMemory = prefs.getDouble('memory_value');
+    setState(() {
+      _memory = storedMemory;
+    });
+  }
+
+  Future<void> _saveMemory() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_memory != null) {
+      await prefs.setDouble('memory_value', _memory!);
+    } else {
+      await prefs.remove('memory_value');
+    }
+  }
+
+  /// Shows the history as a sliding panel.
+  void _showHistoryPopup() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          height: 400,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Calculation History',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.bodyLarge!.color,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () {
+                      _clearHistory();
+                      Navigator.of(context).pop();
+                    },
+                    icon: const Icon(Icons.delete),
+                    tooltip: 'Clear History',
+                    iconSize: 28,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: _history.isEmpty
+                  ? Center(child: Text(
+                    'No History Yet', 
+                    style: TextStyle(
+                      fontSize: 20, 
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.bodyLarge!.color,
+                    )))
+                  : ListView.builder(
+                    itemCount: _history.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        title: Text(_history[index], style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      );
+                    },
+                  ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSnackBar(String message, {IconData icon = Icons.info, Color? bgColor}) {
+    final now = DateTime.now();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = bgColor ?? (isDark ? Colors.grey[800]! : Colors.grey[300]!);
+
+    if (_lastSnackBarTime != null && now.difference(_lastSnackBarTime!) < _cooldownDuration) {
+      return;
+    }
+
+    _lastSnackBarTime = now;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        elevation: 6,
+        backgroundColor: backgroundColor,
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        content: Row(
+          children: [
+            Icon(icon, color: isDark ? Colors.white : Colors.black),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Handles all button pressing logic.
   void _buttonPressed(String value) {
     setState(() {
+
+      // Clear expression.
       if (value == 'C') {
         _expression = '';
         _result = '';
         _justEvaluated = false;
+
+      // Evaluate current expression.
       } else if (value == '=') {
         try {
           final evaluated = _evaluate(_expression);
           if (evaluated != 'Invalid') {
             _result = evaluated;
+            _saveToHistory(_expression, evaluated);
             _justEvaluated = true;
-
-            _history.insert(0, {
-              'expression': _expression,
-              'result': evaluated,
-            });
-            _saveHistory();
           } else {
             _result = 'Invalid';
           }
         } catch (_) {
           _result = 'Error';
         }
+
+      // Backspaces character.
       } else if (value == '⌫') {
         if (_expression.isNotEmpty) {
           _expression = _expression.substring(0, _expression.length - 1);
         }
+
+      // Handles decimal point functionality.
       } else if (value == '.') {
-        final parts = _expression.split(RegExp(r'[+\-×÷]'));
+        final parts = _expression.split(RegExp(r'[+\-×÷()]'));
         final lastPart = parts.isNotEmpty ? parts.last : '';
         if (!lastPart.contains('.')) {
           if (_justEvaluated) {
@@ -179,6 +335,8 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
             _expression += value;
           }
         }
+
+      // Handles support for negative numbers.
       } else if (value == '+/-') {
         final match = RegExp(r'(-?\d*\.?\d+)$').firstMatch(_expression);
         if (match != null) {
@@ -186,13 +344,45 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           final start = match.start;
           final end = match.end;
           if (lastNumber.replaceAll(RegExp(r'[().]'), '') == '0') return;
-          final toggled = lastNumber.contains('-(')
-              ? lastNumber.replaceFirst('-(', '').replaceFirst(')', '')
-              : lastNumber.startsWith('-')
-                  ? lastNumber.replaceFirst('-', '')
-                  : '-($lastNumber)';
-          _expression = _expression.replaceRange(start, end, toggled);
+          if (lastNumber.startsWith('-(')) {
+            _expression = _expression.replaceRange(start, end, lastNumber.substring(2, lastNumber.length - 1));
+          } else if (lastNumber.startsWith('-')) {
+            _expression = _expression.replaceRange(start, end, lastNumber.replaceFirst('-', ''));
+          } else {
+            _expression = _expression.replaceRange(start, end, '-($lastNumber)');
+          }
         }
+
+      // Handles clearing memory.
+      } else if (value == 'MC') {
+        _memory = 0.0;
+        _saveMemory();
+        _showSnackBar('Memory Cleared', icon: Icons.delete);
+
+      // Handles appending memory value to the current expression.
+      } else if (value == 'MR') {
+        _expression += _memory.toString().replaceAll(RegExp(r'\.0$'), '');
+        _showSnackBar('Recalled from Memory: ${_memory!.toString()}');
+
+      // Handles adding the result of the current expression to memory.
+      } else if (value == 'M+') {
+        final current = double.tryParse(_result);
+        if (current != null) {
+          _memory = (_memory ?? 0) + current;
+          _saveMemory();
+          _showSnackBar('Added ${current.toString()} to Memory', icon: Icons.copy, bgColor: Colors.green[400]);
+        }
+
+      // Handles subtracting the result of the current expression to memory.
+      } else if (value == 'M-') {
+        final current = double.tryParse(_result);
+        if (current != null) {
+          _memory = (_memory ?? 0) - current;
+          _saveMemory();
+          _showSnackBar('Subtracted ${current.toString()} from Memory', icon: Icons.delete, bgColor: Colors.red[400]);
+        }
+
+      // Default input handling.
       } else {
         if (_justEvaluated) {
           if (RegExp(r'^\d$').hasMatch(value) || value == '.') {
@@ -204,23 +394,21 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           }
           _justEvaluated = false;
         } else {
-          if (value == '0') {
-            final parts = _expression.split(RegExp(r'[+\-×÷()]'));
-            final last = parts.isNotEmpty ? parts.last : '';
-            if (last == '0') return;
-          } else if (RegExp(r'^[1-9]$').hasMatch(value)) {
-            final parts = _expression.split(RegExp(r'[+\-×÷()]'));
-            final last = parts.isNotEmpty ? parts.last : '';
-            if (last == '0') {
-              _expression = _expression.substring(0, _expression.length - 1);
-            }
+          final parts = _expression.split(RegExp(r'[+\-×÷()]'));
+          final last = parts.isNotEmpty ? parts.last : '';
+
+          if (last == '0' && value == '0') return;
+          if (last == '0' && RegExp(r'^[1-9]$').hasMatch(value)) {
+            _expression = _expression.substring(0, _expression.length - 1) + value;
+          } else {
+            _expression += value;
           }
-          _expression += value;
         }
       }
     });
   }
 
+  /// Evaluates mathematical string expressions.
   String _evaluate(String expr) {
     try {
       String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/');
@@ -234,168 +422,109 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
     }
   }
 
-  Future<void> _saveHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = _history.map((e) => '${e['expression']}|${e['result']}').toList();
-    await prefs.setStringList('calc_history', encoded);
-  }
+  Widget _buildDisplay(bool isMobile) {
+    final expressionStyle = TextStyle(
+      fontSize: isMobile ? 36 : 60,
+      color: Theme.of(context).textTheme.bodyLarge!.color,
+    );
+    final resultStyle = expressionStyle.copyWith(fontWeight: FontWeight.bold);
 
-  Future<void> _loadHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final loaded = prefs.getStringList('calc_history') ?? [];
-
-    setState(() {
-      _history = loaded.map((item) {
-        final parts = item.split('|');
-        return {
-          'expression': parts[0],
-          'result': parts.length > 1 ? parts[1] : '',
-        };
-      }).toList();
-    });
-  }
-
-  void _showHistoryPanel() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('History', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
-                    TextButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _history.clear();
-                        });
-                        _saveHistory();
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.delete_outline, size: 35),
-                      label: const Text('Clear', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: _history.isEmpty
-                    ? const Center(child: Text('No history yet.', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)))
-                    : ListView.builder(
-                        itemCount: _history.length,
-                        itemBuilder: (context, index) {
-                          final entry = _history[index];
-                          return ListTile(
-                            title: Text(entry['expression'] ?? '',
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge!.color)),
-                            trailing: Text('= ${entry['result']}',
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge!.color)),
-                            onTap: () {
-                              Navigator.pop(context);
-                              setState(() {
-                                _expression = entry['result'] ?? '';
-                                _result = '';
-                                _justEvaluated = false;
-                              });
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(_expression, style: expressionStyle),
           ),
-        );
-      },
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(_result, style: resultStyle),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildButton(String text, {Color? color}) {
+  Widget _buildButtonGrid(bool isMobile) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: GridView.count(
+          crossAxisCount: 4,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          padding: const EdgeInsets.only(bottom: 16),
+          children: buttons.map((button) {
+            final isOperator = ['÷', '×', '-', '+', '=', '^', '%', '√'].contains(button);
+            final isMemory = ['MC', 'MR', 'M+', 'M-'].contains(button);
+            final color = button == 'C'
+                ? Colors.red
+                : isOperator
+                    ? Colors.orange
+                    : isMemory
+                      ? Colors.blueGrey
+                      : null;
+            return _buildButton(button, color: color, isMobile: isMobile);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButton(String text, {Color? color, bool isMobile = false}) {
     return _AnimatedCalculatorButton(
       label: text,
       color: color ?? Colors.grey[850]!,
       onTap: () => _buttonPressed(text),
+      fontSize: isMobile ? 28 : 60,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Calculator'),
+        title: const Text('Calculator', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        surfaceTintColor: Theme.of(context).scaffoldBackgroundColor,
+        scrolledUnderElevation: 0,
         actions: [
           IconButton(
-            onPressed: _showHistoryPanel,
             icon: const Icon(Icons.history),
-            tooltip: 'View History',
+            onPressed: _showHistoryPopup,
+            tooltip: 'Show History',
           ),
           IconButton(
             onPressed: widget.onToggleTheme,
             icon: Icon(widget.isDarkMode ? Icons.wb_sunny : Icons.dark_mode),
             tooltip: 'Toggle Theme',
-          ),
+          )
         ],
       ),
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                alignment: Alignment.center,
-                child: Text(
-                  _expression,
-                  style: TextStyle(fontSize: 60, color: Theme.of(context).textTheme.bodyLarge!.color),
-                ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 600;
+
+          return SafeArea(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  _buildDisplay(isMobile),
+                  const SizedBox(height: 12),
+                  _buildButtonGrid(isMobile),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                alignment: Alignment.center,
-                child: Text(
-                  _result,
-                  style: TextStyle(
-                    fontSize: 60,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).textTheme.bodyLarge!.color,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: 600,
-                height: 960,
-                child: GridView.count(
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  children: buttons.map((button) {
-                    final isOperator = ['÷', '×', '-', '+', '='].contains(button);
-                    final color = button == 'C'
-                        ? Colors.red
-                        : isOperator
-                            ? Colors.orange
-                            : null;
-                    return _buildButton(button, color: color);
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -405,11 +534,13 @@ class _AnimatedCalculatorButton extends StatefulWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final double fontSize;
 
   const _AnimatedCalculatorButton({
     required this.label,
     required this.color,
     required this.onTap,
+    this.fontSize = 60,
   });
 
   @override
@@ -504,8 +635,8 @@ class _AnimatedCalculatorButtonState extends State<_AnimatedCalculatorButton> wi
               child: Center(
                 child: Text(
                   widget.label,
-                  style: const TextStyle(
-                    fontSize: 60,
+                  style: TextStyle(
+                    fontSize: widget.fontSize,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
