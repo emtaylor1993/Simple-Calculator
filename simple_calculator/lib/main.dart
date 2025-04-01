@@ -1,17 +1,18 @@
 /*
- * MAIN CALCULATOR CLASS
+ * MAIN CLASS
  * 
  * @author Emmanuel Taylor
  * 
  * @description
- *    This is a simple calculator app that is designed to perform basic operations,
- *    and display some of Flutter's cool functionality
+ *    This will be the core class for the Simple Calculator application. It
+ *    provides functionality for basic and scientific calculations, expression
+ *    parsing, theme management, memory operations, and historic tracking.
  * 
- * @packages
- *    flutter
- *    audioplayer
- *    math_expressions
- *    shared_preferences
+ * @dependencies
+ *    - flutter: Core UI framework
+ *    - audioplayers: Used for button sound effects
+ *    - math_expressions: Used to parse and evaluate mathematical expressions
+ *    - shared_preferences: Used to persist theme and calculation history
  */
 
 import 'package:flutter/material.dart';
@@ -351,17 +352,24 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
 
       // Handles support for negative numbers.
       } else if (value == '+/-') {
-        final match = RegExp(r'(-?\d*\.?\d+)$').firstMatch(_expression);
+        final match = RegExp(r'(\-?\(?\d*\.?\d+\)?)$').firstMatch(_expression);
         if (match != null) {
           final lastNumber = match.group(0)!;
           final start = match.start;
           final end = match.end;
-          if (lastNumber.replaceAll(RegExp(r'[().]'), '') == '0') return;
-          if (lastNumber.startsWith('-(')) {
-            _expression = _expression.replaceRange(start, end, lastNumber.substring(2, lastNumber.length - 1));
+
+          if (lastNumber == '0' || lastNumber == '-0') return;
+
+          // Check if the number is already negated.
+          if (lastNumber.startsWith('-(') && lastNumber.endsWith(')')) {
+            // Remove the -(...) wrapper and shift back to positive.
+            final unwrapped = lastNumber.substring(2, lastNumber.length - 1);
+            _expression = _expression.replaceRange(start, end, unwrapped);
           } else if (lastNumber.startsWith('-')) {
+            // Remove single minus.
             _expression = _expression.replaceRange(start, end, lastNumber.replaceFirst('-', ''));
           } else {
+            // Add negation with parentheses.
             _expression = _expression.replaceRange(start, end, '-($lastNumber)');
           }
         }
