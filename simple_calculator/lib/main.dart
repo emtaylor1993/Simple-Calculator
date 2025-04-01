@@ -135,12 +135,11 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   final Duration _cooldownDuration = const Duration(milliseconds: 2000);
   final List<String> buttons = [
     'MC', 'MR', 'M+', 'M-',
-    '7', '8', '9', '÷',
-    '4', '5', '6', '×',
-    '1', '2', '3', '-',
-    'C', '0', '.', '+',
-    '⌫', '(', ')', '=',
-    '+/-', '^', '%', '√',
+    'C', '+/-', '%', '÷',
+    '7', '8', '9', '×',
+    '4', '5', '6', '-',
+    '1', '2', '3', '+',
+    '⌫', '0', '.', '=',
   ];
 
   /// Load saved history from shared preferences.
@@ -412,6 +411,13 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   String _evaluate(String expr) {
     try {
       String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/');
+
+      // Convert percentages to their decimal equivalents (e.g., 20% → (20*0.01))
+      finalExpr = finalExpr.replaceAllMapped(RegExp(r'(\d+(\.\d+)?)%'), (match) {
+        final number = match.group(1);
+        return '($number*0.01)';
+      });
+
       ShuntingYardParser parser = ShuntingYardParser();
       Expression parsedExpression = parser.parse(finalExpr);
       ContextModel context = ContextModel();
@@ -450,27 +456,36 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
     );
   }
 
-  Widget _buildButtonGrid(bool isMobile) {
-    return Expanded(
+  Widget _buildButtonGrid(bool isMobile, BoxConstraints constraints) {
+    final gridPadding = 16.0;
+    final crossAxisCount = 4;
+    final rowCount = 7;
+    final spacing = 8.0;
+
+    final availableHeight = constraints.maxHeight - 220; // Display + spacing
+    final buttonHeight = (availableHeight - ((rowCount - 1) * spacing)) / rowCount;
+    final buttonWidth = (constraints.maxWidth - ((crossAxisCount - 1) * spacing) - gridPadding * 2) / crossAxisCount;
+
+    return SizedBox(
+      height: availableHeight,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: GridView.count(
-          crossAxisCount: 4,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          padding: const EdgeInsets.only(bottom: 16),
-          children: buttons.map((button) {
-            final isOperator = ['÷', '×', '-', '+', '=', '^', '%', '√'].contains(button);
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: GridView.builder(
+          itemCount: buttons.length,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            childAspectRatio: buttonWidth / buttonHeight,
+          ),
+          itemBuilder: (context, index) {
+            final button = buttons[index];
             final isMemory = ['MC', 'MR', 'M+', 'M-'].contains(button);
-            final color = button == 'C'
-                ? Colors.red
-                : isOperator
-                    ? Colors.orange
-                    : isMemory
-                      ? Colors.blueGrey
-                      : null;
+            final isOperator = ['÷', '×', '-', '+', '='].contains(button);
+            final color = button == 'C' ? Colors.red : isMemory ? Colors.teal.shade600 : isOperator ? Colors.orange : null;
             return _buildButton(button, color: color, isMobile: isMobile);
-          }).toList(),
+          },
         ),
       ),
     );
@@ -519,7 +534,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
                 children: [
                   _buildDisplay(isMobile),
                   const SizedBox(height: 12),
-                  _buildButtonGrid(isMobile),
+                  _buildButtonGrid(isMobile, constraints),
                 ],
               ),
             ),
