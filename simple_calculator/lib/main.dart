@@ -410,16 +410,17 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   /// Evaluates mathematical string expressions.
   String _evaluate(String expr) {
     try {
-      String finalExpr = expr.replaceAll('×', '*').replaceAll('÷', '/');
+      expr = expr.replaceAllMapped(RegExp(r'(?<!\d)\.(\d+)'), (match) => '0.${match[1]}');
+      expr = expr.replaceAll('×', '*').replaceAll('÷', '/');
 
       // Convert percentages to their decimal equivalents (e.g., 20% → (20*0.01))
-      finalExpr = finalExpr.replaceAllMapped(RegExp(r'(\d+(\.\d+)?)%'), (match) {
+      expr = expr.replaceAllMapped(RegExp(r'(\d+(\.\d+)?)%'), (match) {
         final number = match.group(1);
         return '($number*0.01)';
       });
 
       ShuntingYardParser parser = ShuntingYardParser();
-      Expression parsedExpression = parser.parse(finalExpr);
+      Expression parsedExpression = parser.parse(expr);
       ContextModel context = ContextModel();
       double eval = parsedExpression.evaluate(EvaluationType.REAL, context);
       return eval.toStringAsFixed(6).replaceFirst(RegExp(r'\.?0+$'), '');
@@ -442,14 +443,28 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Align(
             alignment: Alignment.centerRight,
-            child: Text(_expression, style: expressionStyle),
+            child: SizedBox(
+              height: isMobile ? 40 : 60, // consistent height
+              child: Text(
+                _expression,
+                style: expressionStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Align(
             alignment: Alignment.centerRight,
-            child: Text(_result, style: resultStyle),
+            child: SizedBox(
+              height: isMobile ? 40 : 60, // consistent height
+              child: Text(
+                _result,
+                style: resultStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
         ),
       ],
