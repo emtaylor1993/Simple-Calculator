@@ -16,6 +16,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:math_expressions/math_expressions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -728,6 +729,7 @@ class _AnimatedCalculatorButtonState extends State<_AnimatedCalculatorButton> wi
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.lightImpact();
         _audioPlayer.play(AssetSource('sounds/click.wav'));
         widget.onTap();
       },
