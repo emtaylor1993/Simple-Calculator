@@ -133,17 +133,30 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   List<String> _history = [];   // Stores recent calculations.
   double? _memory = 0.0;         // Stores values in memory for M+, M-, MR, MC.
   DateTime? _lastSnackBarTime;
-  List<String> _undoStack = [];
-  List<String> _redoStack = [];
+  bool _isScientific = false;
   
+  final List<String> _undoStack = [];
+  final List<String> _redoStack = [];
   final Duration _cooldownDuration = const Duration(milliseconds: 2000);
-  final List<String> buttons = [
-    'MC', 'MR', 'M+', 'M-',
-    'AC/⌫', '+/-', '%', '÷',
-    '7', '8', '9', '×',
-    '4', '5', '6', '-',
-    '1', '2', '3', '+',
-    '', '0', '.', '=',
+
+  List<String> get allButtons {
+    return [
+      // Regular calculator buttons
+      'MC', 'MR', 'M+', 'M-',
+      'AC/⌫', '+/-', '%', '÷',
+      '7', '8', '9', '×',
+      '4', '5', '6', '-',
+      '1', '2', '3', '+',
+      '', '0', '.', '=',
+
+      // Scientific buttons come after
+      if (_isScientific) ...scientificButtons,
+    ];
+  }
+
+  final List<String> scientificButtons = [
+    'sin', 'cos', 'tan', 'log',
+    'ln', '√', 'x²', 'x!',
   ];
 
   /// Load saved history from shared preferences.
@@ -385,6 +398,26 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           }
         }
 
+      } else if (['sin', 'cos', 'tan', 'log', 'ln', '√', 'x²', 'x!'].contains(value)) {
+        String wrapped = _expression.isEmpty ? '0' : _expression;
+
+        switch (value) {
+          case '√':
+            _expression = 'sqrt($wrapped)';
+            break;
+          case 'x²':
+            _expression = '($wrapped)^2';
+            break;
+          case 'x!':
+            _expression = '($wrapped)!';
+            break;
+          default:
+            _expression = '$value($wrapped)';
+        }
+
+        _justEvaluated = false;
+        return;
+
       // Handles support for negative numbers.
       } else if (value == '+/-') {
         final match = RegExp(r'(\-?\(?\d*\.?\d+\)?)$').firstMatch(_expression);
@@ -468,7 +501,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   String _evaluate(String expr) {
     try {
       expr = expr.replaceAllMapped(RegExp(r'(?<!\d)\.(\d+)'), (match) => '0.${match[1]}');
-      expr = expr.replaceAll('×', '*').replaceAll('÷', '/');
+      expr = expr.replaceAll('×', '*').replaceAll('÷', '/').replaceAll('√', 'sqrt');
 
       // Convert percentages to their decimal equivalents (e.g., 20% → (20*0.01))
       expr = expr.replaceAllMapped(RegExp(r'(\d+(\.\d+)?)%'), (match) {
@@ -555,19 +588,19 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   Widget _buildButtonGrid(bool isMobile, BoxConstraints constraints) {
     final gridPadding = 16.0;
     final crossAxisCount = 4;
-    final rowCount = 7;
+    final rowCount = _isScientific ? 9 : 7;
     final spacing = 8.0;
 
     final availableHeight = constraints.maxHeight - 220; // Display + spacing
     final buttonHeight = (availableHeight - ((rowCount - 1) * spacing)) / rowCount;
     final buttonWidth = (constraints.maxWidth - ((crossAxisCount - 1) * spacing) - gridPadding * 2) / crossAxisCount;
-    
+
     return SizedBox(
       height: availableHeight,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: GridView.builder(
-          itemCount: buttons.length,
+          itemCount: allButtons.length,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
@@ -576,7 +609,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
             childAspectRatio: buttonWidth / buttonHeight,
           ),
           itemBuilder: (context, index) {
-            final button = buttons[index];
+            final button = allButtons[index];
             final isMemory = ['MC', 'MR', 'M+', 'M-'].contains(button);
             final isOperator = ['÷', '×', '-', '+', '='].contains(button);
             final color = button == 'AC/⌫' ? Colors.red : isMemory ? Colors.teal.shade600 : isOperator ? Colors.orange : null;
@@ -589,11 +622,13 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
 
   Widget _buildButton(String text, {Color? color, bool isMobile = false}) {
     final String label = text == 'AC/⌫' ? (_expression.isEmpty && _result.isEmpty ? 'AC' : '⌫') : text;
+    final double fontSize = _isScientific ? (isMobile ? 20 : 28) : (isMobile ? 24 : 32);
+
     return _AnimatedCalculatorButton(
       label: label,
       color: color ?? Colors.grey[850]!,
       onTap: () => _buttonPressed(text),
-      fontSize: isMobile ? 28 : 60,
+      fontSize: fontSize,
     );
   }
 
@@ -617,6 +652,15 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
             icon: const Icon(Icons.redo),
             onPressed: _redoStack.isNotEmpty ? _redo : null,
             tooltip: 'Redo',
+          ),
+          IconButton(
+            icon: Icon(_isScientific ? Icons.calculate : Icons.functions),
+            onPressed: () {
+              setState(() {
+                _isScientific = !_isScientific;
+              });
+            },
+            tooltip: 'Toggle Scientific Mode',
           ),
           IconButton(
             icon: const Icon(Icons.history),
