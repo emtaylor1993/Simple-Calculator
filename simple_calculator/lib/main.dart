@@ -132,6 +132,8 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   List<String> _history = [];   // Stores recent calculations.
   double? _memory = 0.0;         // Stores values in memory for M+, M-, MR, MC.
   DateTime? _lastSnackBarTime;
+  List<String> _undoStack = [];
+  List<String> _redoStack = [];
   
   final Duration _cooldownDuration = const Duration(milliseconds: 2000);
   final List<String> buttons = [
@@ -187,6 +189,34 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
       await prefs.setDouble('memory_value', _memory!);
     } else {
       await prefs.remove('memory_value');
+    }
+  }
+
+  void _saveToUndoStack() {
+    if (_expression.isNotEmpty & (_undoStack.isEmpty || _undoStack.last != _expression)) {
+      _undoStack.add(_expression);
+      if (_undoStack.length > 100) _undoStack.removeAt(0);
+    }
+    _redoStack.clear();
+  }
+
+  void _undo() {
+    if (_undoStack.isNotEmpty) {
+      _redoStack.add(_expression);
+      _expression = _undoStack.removeLast();
+      _result = '';
+      _justEvaluated = false;
+      setState(() {});
+    }
+  }
+
+  void _redo() {
+    if (_redoStack.isNotEmpty) {
+      _undoStack.add(_expression);
+      _expression = _redoStack.removeLast();
+      _result = '';
+      _justEvaluated = false;
+      setState(() {});
     }
   }
 
@@ -308,6 +338,9 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   /// Handles all button pressing logic.
   void _buttonPressed(String value) {
     setState(() {
+      if (value != 'Undo' && value != 'Redo') {
+        _saveToUndoStack();
+      }
 
       // Clear expression.
       if (value == 'C') {
@@ -572,6 +605,16 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
         surfaceTintColor: Theme.of(context).scaffoldBackgroundColor,
         scrolledUnderElevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.undo),
+            onPressed: _undoStack.isNotEmpty ? _undo : null,
+            tooltip: 'Undo',
+          ),
+          IconButton(
+            icon: const Icon(Icons.redo),
+            onPressed: _redoStack.isNotEmpty ? _redo : null,
+            tooltip: 'Redo',
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             onPressed: _showHistoryPopup,
