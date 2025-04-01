@@ -453,43 +453,67 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
 
   Widget _buildDisplay(bool isMobile) {
     final expressionStyle = TextStyle(
-      fontSize: isMobile ? 36 : 60,
+      fontSize: isMobile ? 28 : 40,
+      fontWeight: FontWeight.w400,
       color: Theme.of(context).textTheme.bodyLarge!.color,
     );
-    final resultStyle = expressionStyle.copyWith(fontWeight: FontWeight.bold);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: SizedBox(
-              height: isMobile ? 40 : 60, // consistent height
+    final resultColor = Theme.of(context).textTheme.bodyLarge!.color!;
+    final resultStyle = TextStyle(
+      fontSize: isMobile ? 48 : 64,
+      fontWeight: FontWeight.bold,
+      color: resultColor,
+    );
+
+    String liveResult = '';
+    bool isPreview = false;
+
+    if (_expression.isNotEmpty && !_justEvaluated) {
+      final preview = _evaluate(_expression);
+      if (preview != 'Invalid') {
+        liveResult = '= $preview';
+        isPreview = true;
+      }
+    } else if (_result.isNotEmpty) {
+      liveResult = _result;
+      isPreview = false;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          SizedBox(
+            height: isMobile ? 40 : 48,
+            child: Align(
+              alignment: Alignment.centerRight,
               child: Text(
                 _expression,
                 style: expressionStyle,
                 overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: SizedBox(
-              height: isMobile ? 40 : 60, // consistent height
+          const SizedBox(height: 8),
+          SizedBox(
+            height: isMobile ? 56 : 72,
+            child: Align(
+              alignment: Alignment.centerRight,
               child: Text(
-                _result,
-                style: resultStyle,
+                liveResult,
+                style: resultStyle.copyWith(
+                  color: isPreview ? resultColor.withAlpha((0.5 * 255).round()) : resultColor,
+                ),
                 overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
