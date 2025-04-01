@@ -139,11 +139,11 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   final Duration _cooldownDuration = const Duration(milliseconds: 2000);
   final List<String> buttons = [
     'MC', 'MR', 'M+', 'M-',
-    'C', '+/-', '%', '÷',
+    'AC/⌫', '+/-', '%', '÷',
     '7', '8', '9', '×',
     '4', '5', '6', '-',
     '1', '2', '3', '+',
-    '⌫', '0', '.', '=',
+    '', '0', '.', '=',
   ];
 
   /// Load saved history from shared preferences.
@@ -344,11 +344,18 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
       }
 
       // Clear expression.
-      if (value == 'C') {
-        _expression = '';
-        _result = '';
-        _justEvaluated = false;
-
+      if (value == 'AC/⌫') {
+        if (_expression.isEmpty && _result.isEmpty) {
+          _memory = 0.0;
+          _undoStack.clear();
+          _redoStack.clear();
+          _clearHistory();
+          _showSnackBar('Calculator Reset', icon: Icons.restart_alt_sharp, bgColor: Colors.green[400]);
+        } else {
+          if (_expression.isNotEmpty) {
+            _expression = _expression.substring(0, _expression.length - 1);
+          }
+        }
       // Evaluate current expression.
       } else if (value == '=') {
         try {
@@ -362,12 +369,6 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
           }
         } catch (_) {
           _result = 'Error';
-        }
-
-      // Backspaces character.
-      } else if (value == '⌫') {
-        if (_expression.isNotEmpty) {
-          _expression = _expression.substring(0, _expression.length - 1);
         }
 
       // Handles decimal point functionality.
@@ -560,7 +561,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
     final availableHeight = constraints.maxHeight - 220; // Display + spacing
     final buttonHeight = (availableHeight - ((rowCount - 1) * spacing)) / rowCount;
     final buttonWidth = (constraints.maxWidth - ((crossAxisCount - 1) * spacing) - gridPadding * 2) / crossAxisCount;
-
+    
     return SizedBox(
       height: availableHeight,
       child: Padding(
@@ -578,7 +579,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
             final button = buttons[index];
             final isMemory = ['MC', 'MR', 'M+', 'M-'].contains(button);
             final isOperator = ['÷', '×', '-', '+', '='].contains(button);
-            final color = button == 'C' ? Colors.red : isMemory ? Colors.teal.shade600 : isOperator ? Colors.orange : null;
+            final color = button == 'AC/⌫' ? Colors.red : isMemory ? Colors.teal.shade600 : isOperator ? Colors.orange : null;
             return _buildButton(button, color: color, isMobile: isMobile);
           },
         ),
@@ -587,8 +588,9 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
   }
 
   Widget _buildButton(String text, {Color? color, bool isMobile = false}) {
+    final String label = text == 'AC/⌫' ? (_expression.isEmpty && _result.isEmpty ? 'AC' : '⌫') : text;
     return _AnimatedCalculatorButton(
-      label: text,
+      label: label,
       color: color ?? Colors.grey[850]!,
       onTap: () => _buttonPressed(text),
       fontSize: isMobile ? 28 : 60,
