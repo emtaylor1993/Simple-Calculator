@@ -218,6 +218,7 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
                     onPressed: () {
                       _clearHistory();
                       Navigator.of(context).pop();
+                      _showSnackBar('History Cleared', icon: Icons.delete, bgColor: Colors.green[400]);
                     },
                     icon: const Icon(Icons.delete),
                     tooltip: 'Clear History',
@@ -235,14 +236,27 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).textTheme.bodyLarge!.color,
                     )))
-                  : ListView.builder(
+                  : ListView.separated(
+                    shrinkWrap: true,
                     itemCount: _history.length,
+                    separatorBuilder: (context, index) => Divider(
+                      color: Theme.of(context).dividerColor,
+                      thickness: 1,
+                      height: 12,
+                    ),
                     itemBuilder: (context, index) {
-                      return ListTile(
-                        title: Text(_history[index], style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          _history[index],
+                          style: TextStyle(
+                            fontSize: 20,
+                            color: Theme.of(context).textTheme.bodyLarge!.color,
+                          ),
+                        ),
                       );
                     },
-                  ),
+                  )
               ),
             ],
           ),
