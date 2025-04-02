@@ -594,28 +594,46 @@ class CalculatorHomePageState extends State<CalculatorHomePage> {
     final availableHeight = constraints.maxHeight - 220; // Display + spacing
     final buttonHeight = (availableHeight - ((rowCount - 1) * spacing)) / rowCount;
     final buttonWidth = (constraints.maxWidth - ((crossAxisCount - 1) * spacing) - gridPadding * 2) / crossAxisCount;
+    final buttonsToShow = _isScientific ? allButtons : allButtons;
 
-    return SizedBox(
-      height: availableHeight,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: GridView.builder(
-          itemCount: allButtons.length,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: spacing,
-            mainAxisSpacing: spacing,
-            childAspectRatio: buttonWidth / buttonHeight,
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (child, animation) {
+        final offsetAnimation = Tween<Offset>(
+          begin: const Offset(1.0, 0.0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeInOut,
+        ));
+        return SlideTransition(
+          position: offsetAnimation,
+          child: child,
+        );
+      },
+      child: SizedBox(
+        key: ValueKey(_isScientific),
+        height: availableHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: GridView.builder(
+            itemCount: buttonsToShow.length,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: spacing,
+              mainAxisSpacing: spacing,
+              childAspectRatio: buttonWidth / buttonHeight,
+            ),
+            itemBuilder: (context, index) {
+              final button = buttonsToShow[index];
+              final isMemory = ['MC', 'MR', 'M+', 'M-'].contains(button);
+              final isOperator = ['÷', '×', '-', '+', '='].contains(button);
+              final color = button == 'AC/⌫' ? Colors.red : isMemory ? Colors.teal.shade600 : isOperator ? Colors.orange : null;
+              return _buildButton(button, color: color, isMobile: isMobile);
+            },
           ),
-          itemBuilder: (context, index) {
-            final button = allButtons[index];
-            final isMemory = ['MC', 'MR', 'M+', 'M-'].contains(button);
-            final isOperator = ['÷', '×', '-', '+', '='].contains(button);
-            final color = button == 'AC/⌫' ? Colors.red : isMemory ? Colors.teal.shade600 : isOperator ? Colors.orange : null;
-            return _buildButton(button, color: color, isMobile: isMobile);
-          },
-        ),
+        )
       ),
     );
   }
